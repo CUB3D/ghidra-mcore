@@ -1,4 +1,5 @@
 # sleigh include file for Motorola / NXP M-CORE
+# ISA manual can be found here: https://web.archive.org/web/20160304090032/http://www.saladeteletipos.com/pub/SistemasEmbebidos2006/PlacaMotorola/mcore_rm_1.pdf
 
 define token opbyte (16)
    regX = (0, 3)
@@ -69,7 +70,7 @@ attach variables [ ctrlRegY ] [
 ];
 
 branch_tgt: tgt is branch [tgt = inst_start + 2 + (branch << 1); ] { export *[const]:4 tgt; }
-disp8_label: tgt is disp8 [tgt = (inst_start + 2 + (disp8 << 2)); ] { export *[const]:4 tgt; } 
+disp8_label: tgt is disp8 [tgt = (inst_start + 2 + (disp8 << 2)) & 0xFFFFFFFC; ] { export *[const]:4 tgt; } 
 
 macro rotl32(out, a, b) {
 	local d:4 = b;
@@ -79,16 +80,17 @@ macro rotl32(out, a, b) {
 }
 
 :abs regX is op4_15=0b000000011110 & regX {
-	regX = abs(regX);
+    local tmp:1 = regX s< 0;
+    regX = (regX * zext(tmp == 0)) + (-regX * zext(tmp != 0))
 }
 
 :addc regX, regY is op8_15=0b00000110 & regY & regX {
-	local c1 = carry(regX, regY);
+	local c1:1 = carry(regX, regY);
 	local tmp:4 = regX + regY;
-	local c2 = carry(tmp, zext(C));
-		
-	C = c1 | c2;
+	local c2:1 = carry(tmp, zext(C));
+
 	regX = tmp + zext(C);
+	C = c1 | c2;
 }
 
 :addi regX, oimm5 is op9_15=0b0010000 & oimm5 & regX {
@@ -127,23 +129,18 @@ macro rotl32(out, a, b) {
 
 
 :bf branch_tgt is op11_15=0b11101 & branch_tgt {
-	if(C != 0) goto <next>;
+	if(C != 0) goto inst_next;
 	goto [branch_tgt];
-	<next>
 }
 
 :bgeni regX, oimm5 is op9_15=0b0011001 & oimm5 & regX {
 	regX = 1 << oimm5;
 }
 :bgenr regX, regY is op8_15=0b00010011 & regY & regX {
-	local flag = ((regY >> 5) & 1) == 0;
-	if(flag != 1) goto <zero>;
-		regX = (1 << regY & 0b11111);
-		goto <end>;
-	<zero>
-		regX = 0;
-	
-	<end>
+	local flag:1 = ((regY >> 5) & 1) == 0;
+	local tmp:4 = (1 << (regY & 0b11111));
+    # If flag == 1, tmp, else 0
+    regX = (flag == 1) * tmp;
 }
 
 define pcodeop bkpt;
@@ -170,13 +167,12 @@ define pcodeop brev;
 
 :bsr branch_tgt is op11_15=0b11111 & branch_tgt {
 	r15 = inst_start + 2;
-	goto [branch_tgt];
+	call [branch_tgt];
 }
 
 :bt branch_tgt is op11_15=0b11100 & branch_tgt {
-	if(C != 1) goto <next>;
+	if(C != 1) goto inst_next;
 	goto [branch_tgt];
-	<next>
 }
 
 :btsti regX, oimm5 is op9_15=0b0011011 & oimm5 & regX {
@@ -184,14 +180,12 @@ define pcodeop brev;
 }
 
 :clrf regX is op4_15=0b000000011101 & regX {
-	if(C != 0) goto <next>;
-		regX = 0;
-	<next>
+	if(C != 0) goto inst_next;
+    regX = 0;
 }
 :clrt regX is op4_15=0b000000011100 & regX {
-	if(C != 1) goto <next>;
-		regX = 0;
-	<next>
+	if(C != 1) goto inst_next;
+    regX = 0;
 }
 
 :cmphs regX, regY is op8_15=0b00001100 & regY & regX {
@@ -211,9 +205,8 @@ define pcodeop brev;
 }
 
 :decf regX is op4_15=0b000000001001 & regX {
-	if(C != 0) goto <next>;
-		regX = regX - 1;
-	<next>
+	if(C != 0) goto inst_next;
+    regX = regX - 1;
 }
 :decgt regX is op4_15=0b000000011010 & regX {
 	regX = regX - 1;
@@ -228,19 +221,16 @@ define pcodeop brev;
 	C = regX != 0;
 }
 :dect regX is op4_15=0b000000001000 & regX {
-	if(C != 1) goto <next>;
-		regX = regX - 1;
-	<next>
+	if(C != 1) goto inst_next;
+    regX = regX - 1;
 }
 :divs regX," r1" is op4_15=0b001100100001 & regX {
-	if(r1 == 0) goto <end>;
-		regX = regX s/ r1;
-	<end>
+	if(r1 == 0) goto inst_next;
+    regX = regX s/ r1;
 }
 :divu regX," r1" is op4_15=0b001011000001 & regX {
-	if(r1 == 0) goto <end>;
-		regX = regX / r1;
-	<end>
+	if(r1 == 0) goto inst_next;
+    regX = regX / r1;
 }
 
 define pcodeop doze;
@@ -254,15 +244,13 @@ define pcodeop ff1;
 }
 
 :incf regX is op4_15=0b000000001011 & regX {
-	if(C != 0) goto <next>;
-		regX = regX + 1;
-	<next>
+	if(C != 0) goto inst_next;
+    regX = regX + 1;
 }
 
 :inct regX is op4_15=0b000000001010 & regX {
-	if(C != 1) goto <next>;
-		regX = regX + 1;
-	<next>
+	if(C != 1) goto inst_next;
+    regX = regX + 1;
 }
 
 :ixh regX, regY is op8_15=0b00011101 & regY & regX {
@@ -281,19 +269,20 @@ define pcodeop ff1;
 
 
 :jmpi disp8_label is op4_15=0b01110000 & disp8_label {
-	local dest:2 = *[ram]:2 disp8_label;
+	local dest:4 = *[ram]:4 disp8_label;
 	goto [dest];
 }
 
 :jsr regX is op4_15=0b000000001101 & regX {
 	r15 = inst_start + 2;
-	goto [regX];
+    local dest:4 = regX & 0xFFFFFFFE;
+	call [dest];
 }
 :jsri disp8_label is op4_15=0b01111111 & disp8_label {
 	r15 = inst_start + 2;
 
-	local dest:2 = *[ram]:2 disp8_label;
-	goto [dest];
+	local dest:4 = *[ram]:4 disp8_label;
+	call [dest];
 }
 
 :ld.w regZ, (regX, disp) is op15=1 & ld_size=0b00 & op12=0 & regZ & imm4 & regX [disp = imm4 << 2;] {
@@ -386,23 +375,25 @@ define pcodeop illegal_instruction;
 
 :ldq "r4-r7, ("regX")" is op4_15=0b000000000100 & regX {
 	local EA:4 = regX;
-	r4 = *[ram]:4 EA + 0x0;
-	r5 = *[ram]:4 EA + 0x4;
-	r6 = *[ram]:4 EA + 0x8;
-	r7 = *[ram]:4 EA + 0xc;
+	r4 = *[ram]:4 (EA + 0x0);
+	r5 = *[ram]:4 (EA + 0x4);
+	r6 = *[ram]:4 (EA + 0x8);
+	r7 = *[ram]:4 (EA + 0xc);
 }
 
-loopt_dest: dest is disp4 [ dest = inst_start + (disp4 << 1); ] { export *[const]:4 dest; }
+loopt_dest: dest is disp4 [ dest = inst_start + 2 + (disp4 << 1); ] { export *[const]:4 dest; }
 
 :loopt regY, loopt_dest is op8_15=0b00000100 & regY & loopt_dest  {
-	local CC = C;
+	local old_c:1 = C;
 	
+    # Decrement value in RY
 	regY = regY - 1;
+    # Set C bit if the signed result > 0, clear if not
 	C = regY s> 0;
 	
-	if(CC != 1) goto <else>;
-		goto [loopt_dest];
-	<else>
+    # Goto dest if C was set before decrement
+	if(old_c != 1) goto inst_next;
+    goto [loopt_dest];
 }
 
 :lrw regZ, disp8_label is op12_15=0b0111 & regZ & disp8_label {
@@ -444,6 +435,7 @@ loopt_dest: dest is disp4 [ dest = inst_start + (disp4 << 1); ] { export *[const
 }
 
 :movf regX, regY is op8_15=0b00001010  & regY & regX {
+    if(C != 0) goto inst_next;
 	regX = regY;	
 }
 
@@ -503,7 +495,7 @@ define pcodeop rfi;
 
 define pcodeop rte;
 :rte is op0_15=0b0000000000000010 {
-	rfi();
+	rte();
 }
 
 :sextb regX is op4_15=0b000000010101 & regX {
@@ -528,7 +520,7 @@ define pcodeop rte;
 }
 
 :stm regX"-r15, (r0)" is op4_15=0b000000000111 & regX & regX_imm {
-	local tmp = regX_imm:1;
+	local tmp:1 = regX_imm:1;
 	if(tmp == 15) goto <stm_illegal>;
 	if(tmp == 14) goto <stm_14>;
 	if(tmp == 13) goto <stm_13>;
@@ -606,20 +598,20 @@ define pcodeop stop;
 
 :stq "r4-r7,("regX")" is op4_15=0b000000000101 & regX {
 	local EA:4 = regX;
-	*[ram]:4 EA + 0x0 = r4;
-	*[ram]:4 EA + 0x4 = r5;
-	*[ram]:4 EA + 0x8 = r6;
-	*[ram]:4 EA + 0xc = r7;
+	*[ram]:4 (EA + 0x0) = r4;
+	*[ram]:4 (EA + 0x4) = r5;
+	*[ram]:4 (EA + 0x8) = r6;
+	*[ram]:4 (EA + 0xc) = r7;
 }
 
 :subc regX, regY is op8_15=0b00000111 & regY & regX {
 
-	local c1 = sborrow(regX, regY);
+	local c1:1 = sborrow(regX, regY);
 	local tmp:4 = regX - regY;
-	local c2 = sborrow(tmp, zext(C == 0));
+	local c2:1 = sborrow(tmp, zext(C == 0));
 	
-	C = c1 | c2;
 	regX = tmp - zext(C == 0);
+	C = c1 | c2;
 }
 
 :subi regX, oimm5 is op9_15=0b0010010 & oimm5 & regX {
@@ -646,7 +638,7 @@ define pcodeop trap;
 
 :tstnbz regX is op4_15=0b000000011001 & regX {
 	local tmp:4 = regX;
-	local flag = (tmp & 0xFF) == 0;
+	local flag:1 = (tmp & 0xFF) == 0;
 	tmp = tmp >> 8;
 	flag = flag || ((tmp & 0xFF) == 0);
 	tmp = tmp >> 8;
@@ -667,7 +659,7 @@ define pcodeop wait;
 }
 
 :xsr regX is op4_15=0b001110000000 & regX {
-	local ctmp = C;
+	local ctmp:1 = C;
 	C = (regX & 1) == 1;
 	regX = regX >> 1;
 	regX = regX | (zext(ctmp) << 31); 
