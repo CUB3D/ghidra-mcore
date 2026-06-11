@@ -81,7 +81,7 @@ macro rotl32(out, a, b) {
 
 :abs regX is op4_15=0b000000011110 & regX {
     local tmp:1 = regX s< 0;
-    regX = (regX * zext(tmp == 0)) + (-regX * zext(tmp != 0))
+    regX = (regX * zext(tmp == 0)) + (-regX * zext(tmp != 0));
 }
 
 :addc regX, regY is op8_15=0b00000110 & regY & regX {
@@ -140,7 +140,7 @@ macro rotl32(out, a, b) {
 	local flag:1 = ((regY >> 5) & 1) == 0;
 	local tmp:4 = (1 << (regY & 0b11111));
     # If flag == 1, tmp, else 0
-    regX = (flag == 1) * tmp;
+    regX = zext(flag == 1) * tmp;
 }
 
 define pcodeop bkpt;
