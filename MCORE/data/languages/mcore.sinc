@@ -528,11 +528,11 @@ define pcodeop rte;
 }
 :st.b regZ, (regX, disp) is op15=1 & ld_size=0b01 & op12=1 & regZ & imm4 & regX [disp = imm4 << 0;] {
 	local EA:4 = regX + disp;
-	*[ram]:1 EA = regZ;
+	*[ram]:1 EA = regZ:1;
 }
 :st.h regZ, (regX, disp) is op15=1 & ld_size=0b10 & op12=1 & regZ & imm4 & regX [disp = imm4 << 1;] {
 	local EA:4 = regX + disp;
-	*[ram]:2 EA = regZ;
+	*[ram]:2 EA = regZ:2;
 }
 
 :stm regX"-r15, (r0)" is op4_15=0b000000000111 & regX & regX_imm {
