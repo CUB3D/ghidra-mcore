@@ -7,6 +7,7 @@ define token opbyte (16)
    regZ = (8, 11)
    ctrlRegY = (4, 8)
    oimm5 = (4, 8)
+   oimm5_copy = (4, 8)
    disp8 = (0, 7)
    disp4 = (0, 3)
    ld_size = (13, 14)
@@ -71,6 +72,7 @@ attach variables [ ctrlRegY ] [
 
 branch_tgt: tgt is branch [tgt = inst_start + 2 + (branch << 1); ] { export *[const]:4 tgt; }
 disp8_label: tgt is disp8 [tgt = (inst_start + 2 + (disp8 << 2)) & 0xFFFFFFFC; ] { export *[const]:4 tgt; } 
+oimm5_plus1: val is oimm5 [val = oimm5 + 1;] { export *[const]:4 val; }
 
 macro rotl32(out, a, b) {
 	local d:4 = b;
@@ -93,8 +95,8 @@ macro rotl32(out, a, b) {
 	C = c1 | c2;
 }
 
-:addi regX, oimm5 is op9_15=0b0010000 & oimm5 & regX {
-	regX = regX + oimm5;
+:addi regX, oimm5_plus1 is op9_15=0b0010000 & oimm5_plus1 & regX {
+	regX = regX + oimm5_plus1;
 }
 
 :addu regX, regY is op8_15=0b00011100 & regY & regX {
@@ -148,8 +150,11 @@ define pcodeop bkpt;
 	bkpt();
 }
 
-:bmaski regX, oimm5 is op9_15=0b0010110 & oimm5 & regX {
-	regX = (1 << oimm5) - 1;
+bmaski_imm: oimm5 is oimm5 & oimm5_copy > 7 { local imm:4 = (1 << oimm5) - 1; export *[const]:4 imm; }
+bmaski_imm: "32" is oimm5=0 { local imm:4 = 0xFFFFFFFF; export *[const]:4 imm; }
+
+:bmaski regX, bmaski_imm is op9_15=0b0010110 & bmaski_imm & regX {
+	regX = bmaski_imm;
 }
 
 :br branch_tgt is op11_15=0b11110 & branch_tgt {
@@ -194,8 +199,8 @@ define pcodeop brev;
 :cmplt regX, regY is op8_15=0b00001101 & regY & regX {
 	C = regX s< regY;
 }
-:cmplti regX, oimm5 is op9_15=0b0010001 & oimm5 & regX {
-	C = regX s< oimm5;
+:cmplti regX, oimm5_plus1 is op9_15=0b0010001 & oimm5_plus1 & regX {
+	C = regX s< oimm5_plus1;
 }
 :cmpne regX, regY is op8_15=0b00001111 & regY & regX {
 	C = regX != regY;
@@ -268,7 +273,7 @@ define pcodeop ff1;
 }
 
 
-:jmpi disp8_label is op4_15=0b01110000 & disp8_label {
+:jmpi disp8_label is op8_15=0b01110000 & disp8_label {
 	local dest:4 = *[ram]:4 disp8_label;
 	goto [dest];
 }
@@ -278,7 +283,7 @@ define pcodeop ff1;
     local dest:4 = regX & 0xFFFFFFFE;
 	call [dest];
 }
-:jsri disp8_label is op4_15=0b01111111 & disp8_label {
+:jsri disp8_label is op8_15=0b01111111 & disp8_label {
 	r15 = inst_start + 2;
 
 	local dest:4 = *[ram]:4 disp8_label;
@@ -319,57 +324,58 @@ define pcodeop illegal_instruction;
 	if(tmp == 1) goto <ldm_1>;
 	if(tmp == 0) goto <ldm_illegal>;
 	
-	<ldm_1>
-	r1 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_2>
-	r2 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_3>
-	r3 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_4>
-	r4 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_5>
-	r5 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_6>
-	r6 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_7>
-	r7 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_8>
-	r8 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_9>
-	r9 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_10>
-	r10 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_11>
-	r11 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_12>
-	r12 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_13>
-	r13 = *[ram]:4 r0;
-	r0 = r0 + 4;
-	<ldm_14>
-	r14 = *[ram]:4 r0;
-	r0 = r0 + 4;
+	local tgt:4 = r0;
 	
-	r15 = *[ram]:4 r0;
-	r0 = r0 + 4;
+	<ldm_1>
+	r1 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_2>
+	r2 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_3>
+	r3 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_4>
+	r4 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_5>
+	r5 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_6>
+	r6 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_7>
+	r7 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_8>
+	r8 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_9>
+	r9 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_10>
+	r10 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_11>
+	r11 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_12>
+	r12 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_13>
+	r13 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	<ldm_14>
+	r14 = *[ram]:4 tgt;
+	tgt = tgt + 4;
+	
+	r15 = *[ram]:4 tgt;
 	goto <end>;
 	
 	
 	
 	<ldm_illegal>
-	illegal_instruction();
+		illegal_instruction();
 	<end>
 }
 
@@ -381,7 +387,7 @@ define pcodeop illegal_instruction;
 	r7 = *[ram]:4 (EA + 0xc);
 }
 
-loopt_dest: dest is disp4 [ dest = inst_start + 2 + (disp4 << 1); ] { export *[const]:4 dest; }
+loopt_dest: dest is disp4 [ dest = inst_start + 2 + (-32 + (disp4 << 1)); ] { export *[const]:4 dest; }
 
 :loopt regY, loopt_dest is op8_15=0b00000100 & regY & loopt_dest  {
 	local old_c:1 = C;
@@ -538,51 +544,52 @@ define pcodeop rte;
 	if(tmp == 1) goto <stm_1>;
 	if(tmp == 0) goto <stm_illegal>;
 	
-	<stm_1>
-	*[ram]:4 r0 = r1;
-	r0 = r0 + 4;
-	<stm_2>
-	*[ram]:4 r0 = r2;
-	r0 = r0 + 4;
-	<stm_3>
-	*[ram]:4 r0 = r3;
-	r0 = r0 + 4;
-	<stm_4>
-	*[ram]:4 r0 = r4;
-	r0 = r0 + 4;
-	<stm_5>
-	*[ram]:4 r0 = r5;
-	r0 = r0 + 4;
-	<stm_6>
-	*[ram]:4 r0 = r6;
-	r0 = r0 + 4;
-	<stm_7>
-	*[ram]:4 r0 = r7;
-	r0 = r0 + 4;
-	<stm_8>
-	*[ram]:4 r0 = r8;
-	r0 = r0 + 4;
-	<stm_9>
-	*[ram]:4 r0 = r9;
-	r0 = r0 + 4;
-	<stm_10>
-	*[ram]:4 r0 = r10;
-	r0 = r0 + 4;
-	<stm_11>
-	*[ram]:4 r0 = r11;
-	r0 = r0 + 4;
-	<stm_12>
-	*[ram]:4 r0 = r12;
-	r0 = r0 + 4;
-	<stm_13>
-	*[ram]:4 r0 = r13;
-	r0 = r0 + 4;
-	<stm_14>
-	*[ram]:4 r0 = r14;
-	r0 = r0 + 4;
+	local tgt:4 = r0;
 	
-	*[ram]:4 r0 = r15;
-	r0 = r0 + 4;
+	<stm_1>
+	*[ram]:4 tgt = r1;
+	tgt = tgt + 4;
+	<stm_2>
+	*[ram]:4 tgt = r2;
+	tgt = tgt + 4;
+	<stm_3>
+	*[ram]:4 tgt = r3;
+	tgt = tgt + 4;
+	<stm_4>
+	*[ram]:4 tgt = r4;
+	tgt = tgt + 4;
+	<stm_5>
+	*[ram]:4 tgt = r5;
+	tgt = tgt + 4;
+	<stm_6>
+	*[ram]:4 tgt = r6;
+	tgt = tgt + 4;
+	<stm_7>
+	*[ram]:4 tgt = r7;
+	tgt = tgt + 4;
+	<stm_8>
+	*[ram]:4 tgt = r8;
+	tgt = tgt + 4;
+	<stm_9>
+	*[ram]:4 tgt = r9;
+	tgt = tgt + 4;
+	<stm_10>
+	*[ram]:4 tgt = r10;
+	tgt = tgt + 4;
+	<stm_11>
+	*[ram]:4 tgt = r11;
+	tgt = tgt + 4;
+	<stm_12>
+	*[ram]:4 tgt = r12;
+	tgt = tgt + 4;
+	<stm_13>
+	*[ram]:4 tgt = r13;
+	tgt = tgt + 4;
+	<stm_14>
+	*[ram]:4 tgt = r14;
+	tgt = tgt + 4;
+	
+	*[ram]:4 tgt = r15;
 	goto <end>;
 
 	
@@ -614,8 +621,8 @@ define pcodeop stop;
 	C = c1 | c2;
 }
 
-:subi regX, oimm5 is op9_15=0b0010010 & oimm5 & regX {
-	regX = regX - oimm5;
+:subi regX, oimm5_plus1 is op9_15=0b0010010 & oimm5_plus1 & regX {
+	regX = regX - oimm5_plus1;
 }
 
 :subu regX, regY is op8_15=0b00000101 & regY & regX {
@@ -696,3 +703,13 @@ define pcodeop wait;
 	regX = zext(regX:2);
 }
 
+# not in the PDF but referenced in binutils
+define pcodeop idly4;
+:idly4 is op0_15=0b0000000000000111 {
+	idly4();
+}
+
+# not in the PDF but referenced in binutils
+:mulsh regX, regY is op8_15=0b01101000 & regY & regX {
+	regX = sext(regY:2) * sext(regX:2);
+}
