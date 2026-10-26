@@ -11,7 +11,7 @@
             processorspec="mcore.pspec"
             id="MCORE:BE:32:default">
     <description>MCORE</description>
-    <compiler name="default" spec="mcore.cspec" id="default"/>
+    <compiler name="default" spec="mcore_be.cspec" id="default"/>
   </language>
   <language processor="MCORE"
             endian="little"
@@ -22,7 +22,7 @@
             processorspec="mcore.pspec"
             id="MCORE:LE:32:default">
     <description>MCORE</description>
-    <compiler name="default" spec="mcore.cspec" id="default"/>
+    <compiler name="default" spec="mcore_le.cspec" id="default"/>
   </language> 
 
 </language_definitions>

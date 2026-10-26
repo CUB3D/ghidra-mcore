@@ -1,5 +1,9 @@
 # sleigh include file for Motorola / NXP M-CORE
 # ISA manual can be found here: https://web.archive.org/web/20160304090032/http://www.saladeteletipos.com/pub/SistemasEmbebidos2006/PlacaMotorola/mcore_rm_1.pdf
+# Known limitations:
+# - A few ops are not implemented: brev
+# - Shifts should set dest to 0 if shamt > 31
+ 
 
 define token opbyte (16)
    regX = (0, 3)
@@ -161,6 +165,7 @@ bmaski_imm: "32" is oimm5=0 { local imm:4 = 0xFFFFFFFF; export *[const]:4 imm; }
 	goto [branch_tgt];
 }
 
+# Bit reverse
 define pcodeop brev;
 :brev regX is op4_15=0b000000001111 & regX {
 	regX = brev(regX);
@@ -243,9 +248,8 @@ define pcodeop doze;
 	doze();
 }
 
-define pcodeop ff1;
 :ff1 regX is op4_15=0b000000001110 & regX {
-	regX = ff1(regX);
+	regX = lzcount(regX);
 }
 
 :incf regX is op4_15=0b000000001011 & regX {
@@ -265,10 +269,11 @@ define pcodeop ff1;
 	regX = regX + (regY << 2);
 }
 
+# Note: these assume an aligned destination address. HW will ignore lsb.
 :jmp regX is op4_15=0b000000001100 & regX {
 	goto [regX];
 }
-:JMP regX is op4_15=0b000000001100 & regX & regX=0xf {
+:jmp regX is op4_15=0b000000001100 & regX & regX=0xf {
 	return [regX];
 }
 
@@ -406,6 +411,7 @@ loopt_dest: dest is disp4 [ dest = inst_start + 2 + (-32 + (disp4 << 1)); ] { ex
 	regZ = *[ram]:4 disp8_label;
 }
 
+# Note: shifts above 31 should set regX = 0
 :lsl regX, regY is op8_15=0b00011011 & regY & regX {
 	regX = regX << (regY & 0b111111);
 }
@@ -483,6 +489,8 @@ loopt_dest: dest is disp4 [ dest = inst_start + 2 + (-32 + (disp4 << 1)); ] { ex
 define pcodeop rfi;
 :rfi is op0_15=0b0000000000000011 {
 	rfi();
+	PSR = FPSR;
+	goto [FPC];
 }
 
 
@@ -502,6 +510,8 @@ define pcodeop rfi;
 define pcodeop rte;
 :rte is op0_15=0b0000000000000010 {
 	rte();
+	PSR = EPSR;
+	return [EPC];
 }
 
 :sextb regX is op4_15=0b000000010101 & regX {
@@ -612,10 +622,9 @@ define pcodeop stop;
 }
 
 :subc regX, regY is op8_15=0b00000111 & regY & regX {
-
-	local c1:1 = sborrow(regX, regY);
+	local c1:1 = regX < regY;
 	local tmp:4 = regX - regY;
-	local c2:1 = sborrow(tmp, zext(C == 0));
+	local c2:1 = tmp < zext(C == 0);
 	
 	regX = tmp - zext(C == 0);
 	C = c1 | c2;

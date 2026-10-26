@@ -30,7 +30,7 @@ jobs:
         name: "Setup Ghidra"
         uses: antoniovazquezblanco/setup-ghidra@v2.0.5
         with:
-          version: "11.4"
+          version: "12.2"
       -
         name: "Build extension"
         run: cd MCORE && gradle buildExtension
@@ -61,7 +61,7 @@ jobs:
         name: "Setup JDK"
         uses: actions/setup-java@v4
         with:
-          java-version: "21"
+          java-version: "25"
           distribution: "temurin"
           java-package: "jre"
       -
